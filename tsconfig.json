@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react",
+    "jsxFactory": "createElement",
+    "jsxFragmentFactory": "Fragment",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "blazecn": ["../blazecn/src/index.ts"],
+      "blazecn/*": ["../blazecn/src/*"],
+      "kaji": ["../kaji/src/index.ts"],
+      "kaji/*": ["../kaji/src/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

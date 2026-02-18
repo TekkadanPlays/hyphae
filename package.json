@@ -1,0 +1,31 @@
+{
+  "name": "stoat-ui",
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/server.tsx",
+    "build:css": "bunx @tailwindcss/cli -i src/styles/app.css -o public/assets/app.css --minify",
+    "build:client": "bun build src/client/index.ts --outdir public/assets --target browser --format esm --splitting --minify"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.8.0",
+    "@noble/hashes": "^1.7.0",
+    "@scure/base": "^1.2.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "fun-animal-names": "^0.1.1",
+    "hono": "^4.7.0",
+    "inferno": "^8.2.3",
+    "inferno-create-element": "^8.2.3",
+    "inferno-server": "^8.2.3",
+    "tailwind-merge": "^3.4.0",
+    "trystero": "^0.22.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.7.0",
+    "@types/bun": "^1.2.0"
+  }
+}
