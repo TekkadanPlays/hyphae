@@ -1,7 +1,6 @@
 import { createElement } from 'inferno-create-element';
 import { cn } from '../../lib/utils';
 import { store } from '../store';
-import { p2pStore } from '../p2p/p2pStore';
 import { nostr } from '../nostr';
 import { Separator } from 'blazecn/Separator';
 
@@ -47,13 +46,11 @@ function StatCard({ icon, label, value }: { icon: string; label: string; value: 
 
 function LanderContent() {
   const state = store.getState();
-  const p2p = p2pStore.getState();
   const profile = state.nostrPubkey ? nostr.getProfile(state.nostrPubkey) : null;
   const displayName = profile?.displayName || profile?.name || null;
 
   const connectedNetworks = state.networks.filter(n => n.connected).length;
   const totalChannels = state.networks.reduce((sum, n) => sum + n.channels.length, 0);
-  const p2pPeers = p2p.peerList.length;
 
   return createElement('div', { className: 'max-w-2xl mx-auto px-6 py-10' },
     // Welcome header
@@ -67,7 +64,7 @@ function LanderContent() {
             '! What would you like to do?',
           )
         : createElement('p', { className: 'text-muted-foreground' },
-            'IRC and peer-to-peer chat, woven together.',
+            'IRC chat with Nostr identity, woven together.',
           ),
     ),
 
@@ -81,25 +78,16 @@ function LanderContent() {
         actionLabel: 'Open IRC',
         color: 'bg-primary/10 text-primary',
       }),
-      createElement(FeatureCard, {
-        icon: 'hub',
-        title: 'P2P Chat',
-        description: 'Peer-to-peer encrypted rooms with no server. Voice/video calls, screen sharing, and file transfer.',
-        action: () => store.setAppMode('p2p'),
-        actionLabel: 'Open P2P',
-        color: 'bg-online/10 text-online',
-      }),
     ),
 
     // Quick stats
-    (connectedNetworks > 0 || p2p.roomId)
+    connectedNetworks > 0
       ? createElement('div', { className: 'mb-8' },
           createElement(Separator, { className: 'mb-4' }),
           createElement('h2', { className: 'text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3' }, 'Active Sessions'),
-          createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-3 gap-3' },
+          createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
             createElement(StatCard, { icon: 'dns', label: 'IRC Networks', value: `${connectedNetworks} connected` }),
             createElement(StatCard, { icon: 'tag', label: 'Channels', value: `${totalChannels} joined` }),
-            createElement(StatCard, { icon: 'group', label: 'P2P Peers', value: p2p.roomId ? `${p2pPeers} online` : 'Not in a room' }),
           ),
         )
       : null,

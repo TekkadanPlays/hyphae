@@ -6,16 +6,12 @@ import { store } from './store';
 import { nostr } from './nostr';
 import { initKeybinds } from './keybinds';
 import { App } from './components/App';
-import { p2pStore } from './p2p/p2pStore';
 
 // Connect WebSocket
 socket.connect();
 
 // Initialize keyboard shortcuts
 initKeybinds();
-
-// Initialize P2P store (generates crypto keys, loads settings)
-p2pStore.init();
 
 // Re-render when nostr profiles update
 nostr.subscribe(() => mount());
@@ -28,9 +24,8 @@ function mount() {
   }
 }
 
-// Re-render on state changes from either store
+// Re-render on state changes
 store.subscribe(() => mount());
-p2pStore.subscribe(() => mount());
 
 // Initial render
 mount();

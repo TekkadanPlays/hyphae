@@ -2,8 +2,6 @@ import { createElement } from 'inferno-create-element';
 import { cn } from '../../lib/utils';
 import { store, type SettingsPage as SettingsPageType } from '../store';
 import { nostr } from '../nostr';
-import { p2pStore } from '../p2p/p2pStore';
-import { soundOptions } from '../p2p/config/soundNames';
 import { Button } from 'blazecn/Button';
 import { Input } from 'blazecn/Input';
 import { Label } from 'blazecn/Label';
@@ -63,7 +61,7 @@ function AppGeneral() {
     createElement(SectionHeader, { icon: 'info', title: 'Hyphae' }),
     createElement('div', { className: 'pl-1 space-y-3' },
       createElement('p', { className: 'text-sm text-muted-foreground leading-relaxed' },
-        'IRC and peer-to-peer chat, woven together.',
+        'IRC chat with Nostr identity, woven together.',
       ),
       createElement('p', { className: 'text-[10px] text-muted-foreground/30 font-mono select-none' }, '\u22c6\u02d9\ud80c\udf4a\u208a \u2039\u02da \ud80d\ude67\ud80c\udefc\u02d6\u00b0\ud80c\udd91\u02d9\u22c6'),
     ),
@@ -234,106 +232,9 @@ function IrcGeneral() {
         createElement('span', { className: 'text-xs text-muted-foreground/40 font-mono' }, '• 𝓣𝓱𝓮 𝓶𝓮𝓼𝓼𝓪𝓰𝓮 𝓵𝓪𝓾𝓮𝓷'),
       ),
       createElement('p', { className: 'text-xs text-muted-foreground leading-relaxed' },
-        'IRC + P2P Chat. Built with InfernoJS, Bun, and Kaji.',
+        'IRC chat with Nostr identity. Built with InfernoJS, Bun, and Kaji.',
       ),
       createElement('p', { className: 'text-[10px] text-muted-foreground/30 font-mono select-none' }, '⋆˙𓍊₊ ‹˚ 𓙧𓋼˖°𓆑˙⋆'),
-    ),
-  );
-}
-
-// ─── P2P Settings Sections ───
-
-function P2PProfile() {
-  const p2p = p2pStore.getState();
-  const settings = p2p.userSettings;
-  return createElement('div', { className: 'space-y-6' },
-    createElement(SectionHeader, { icon: 'person', title: 'Profile' }),
-    createElement('div', { className: 'space-y-4 pl-1 max-w-md' },
-      createElement('div', null,
-        createElement(Label, { className: 'text-sm font-medium text-foreground mb-1.5 block' }, 'Display Name'),
-        createElement('input', {
-          type: 'text',
-          className: 'w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring',
-          placeholder: 'Anonymous',
-          value: settings?.customUsername || '',
-          oninput: (e: Event) => { p2pStore.updateSettings({ customUsername: (e.target as HTMLInputElement).value }); },
-        }),
-        createElement('p', { className: 'text-xs text-muted-foreground mt-1' }, 'Shown to other peers in P2P rooms.'),
-      ),
-      settings ? createElement('div', null,
-        createElement(Label, { className: 'text-sm font-medium text-foreground mb-1.5 block' }, 'User ID'),
-        createElement('div', { className: 'rounded-lg border border-input bg-background/50 px-3 py-2 text-xs text-muted-foreground font-mono truncate' }, settings.userId),
-        createElement('p', { className: 'text-xs text-muted-foreground mt-1' }, 'Auto-generated unique identity.'),
-      ) : null,
-    ),
-  );
-}
-
-function P2PNotifications() {
-  const p2p = p2pStore.getState();
-  const settings = p2p.userSettings;
-  return createElement('div', { className: 'space-y-6' },
-    createElement(SectionHeader, { icon: 'notifications', title: 'Notifications' }),
-    createElement('div', { className: 'space-y-1 pl-1' },
-      createElement(SettingRow, { label: 'Play sound on new message' },
-        createElement(Switch, { checked: settings?.playSoundOnNewMessage ?? true, onChange: (v: boolean) => p2pStore.updateSettings({ playSoundOnNewMessage: v }) }),
-      ),
-      createElement(SettingRow, { label: 'Show browser notifications' },
-        createElement(Switch, { checked: settings?.showNotificationOnNewMessage ?? true, onChange: (v: boolean) => p2pStore.updateSettings({ showNotificationOnNewMessage: v }) }),
-      ),
-      createElement(SettingRow, { label: 'Show typing indicator to peers' },
-        createElement(Switch, { checked: settings?.showActiveTypingStatus ?? true, onChange: (v: boolean) => p2pStore.updateSettings({ showActiveTypingStatus: v }) }),
-      ),
-    ),
-    createElement(Separator, null),
-    createElement(SectionHeader, { icon: 'music_note', title: 'Notification Sound' }),
-    createElement('div', { className: 'pl-1' },
-      createElement('select', {
-        className: 'w-full max-w-xs rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring',
-        value: settings?.selectedSound || '',
-        onchange: (e: Event) => { p2pStore.updateSettings({ selectedSound: (e.target as HTMLSelectElement).value }); },
-      },
-        ...soundOptions.map(opt => createElement('option', { key: opt.value, value: opt.value }, opt.label)),
-      ),
-    ),
-  );
-}
-
-function P2PAbout() {
-  return createElement('div', { className: 'space-y-6' },
-    createElement(SectionHeader, { icon: 'info', title: 'About P2P Chat' }),
-    createElement('div', { className: 'space-y-3 pl-1 max-w-lg text-sm text-on-surface-variant leading-relaxed' },
-      createElement('p', null,
-        'P2P Chat uses ',
-        createElement('strong', { className: 'text-foreground' }, 'trystero'),
-        ' for peer-to-peer communication via WebRTC. Messages are sent directly between browsers — no server stores your conversations.',
-      ),
-      createElement('p', null, 'Features: encrypted peer verification, audio/video calls, screen sharing, file transfer, and direct messages.'),
-      createElement('p', null, 'Room connections are established through BitTorrent tracker signaling.'),
-    ),
-  );
-}
-
-function P2PData() {
-  const p2p = p2pStore.getState();
-  return createElement('div', { className: 'space-y-6' },
-    createElement(SectionHeader, { icon: 'database', title: 'Data Management' }),
-    createElement('div', { className: 'flex gap-2 pl-1' },
-      createElement(Button, {
-        variant: 'outline', size: 'sm',
-        onClick: () => {
-          const data = JSON.stringify(p2p, null, 2);
-          const blob = new Blob([data], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = 'p2p-settings.json'; a.click();
-          URL.revokeObjectURL(url);
-        },
-      }, 'Export Settings'),
-      createElement(Button, {
-        variant: 'destructive', size: 'sm',
-        onClick: () => { localStorage.removeItem('chitchatter:settings'); window.location.reload(); },
-      }, 'Reset All P2P Data'),
     ),
   );
 }
@@ -352,10 +253,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'irc-appearance', icon: 'palette', label: 'Appearance', group: 'IRC' },
   { id: 'irc-notifications', icon: 'notifications', label: 'Notifications', group: 'IRC' },
   { id: 'irc-general', icon: 'settings', label: 'General', group: 'IRC' },
-  { id: 'p2p-profile', icon: 'person', label: 'Profile', group: 'P2P' },
-  { id: 'p2p-notifications', icon: 'volume_up', label: 'Notifications', group: 'P2P' },
-  { id: 'p2p-about', icon: 'info', label: 'About', group: 'P2P' },
-  { id: 'p2p-data', icon: 'database', label: 'Data', group: 'P2P' },
 ];
 
 const CONTENT_MAP: Record<SettingsPageType, () => any> = {
@@ -363,10 +260,6 @@ const CONTENT_MAP: Record<SettingsPageType, () => any> = {
   'irc-appearance': IrcAppearance,
   'irc-notifications': IrcNotifications,
   'irc-general': IrcGeneral,
-  'p2p-profile': P2PProfile,
-  'p2p-notifications': P2PNotifications,
-  'p2p-about': P2PAbout,
-  'p2p-data': P2PData,
 };
 
 // ─── Main SettingsPage ───

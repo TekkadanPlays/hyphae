@@ -2,7 +2,6 @@ import { createElement } from 'inferno-create-element';
 import { cn } from '../../lib/utils';
 import { store } from '../store';
 import { nostr } from '../nostr';
-import { p2pStore } from '../p2p/p2pStore';
 import { Separator } from 'blazecn/Separator';
 
 // Reusable orb wrapper
@@ -49,10 +48,8 @@ function SectionLabel({ text }: { text: string }) {
 
 export function NetworkList() {
   const state = store.getState();
-  const p2p = p2pStore.getState();
   const isHome = state.appMode === 'home';
   const isIrc = state.appMode === 'irc';
-  const isP2P = state.appMode === 'p2p';
 
   // Profile image from Nostr
   const profile = state.nostrPubkey ? nostr.getProfile(state.nostrPubkey) : null;
@@ -95,27 +92,6 @@ export function NetworkList() {
           ? createElement('div', {
               className: 'absolute bottom-1 right-1 size-3 rounded-full border-2 border-background bg-online',
             })
-          : null,
-      ),
-
-      // ─── P2P hub orb (right below profile) ───
-      createElement(Orb, {
-        pill: isP2P && !p2p.roomId ? 'full' : isP2P ? 'dot' : 'hover',
-        onClick: () => store.setAppMode('p2p'),
-        title: 'P2P Chat',
-      },
-        createElement(OrbIcon, {
-          active: isP2P,
-          className: cn(
-            isP2P
-              ? 'bg-online text-white'
-              : 'bg-surface-variant text-on-surface-variant hover:bg-online/80 hover:text-white',
-          ),
-        },
-          createElement('span', { className: 'material-symbols-rounded text-xl' }, 'hub'),
-        ),
-        p2p.roomId && p2p.peerList.length > 0
-          ? createElement(Badge, { count: p2p.peerList.length, color: 'bg-online' })
           : null,
       ),
 
@@ -184,42 +160,6 @@ export function NetworkList() {
         ),
       ),
 
-      // ─── P2P rooms section ───
-      p2p.joinedRooms.length > 0
-        ? createElement(Separator, { className: 'w-8 my-1 flex-shrink-0 mx-auto' })
-        : null,
-
-      p2p.joinedRooms.length > 0
-        ? createElement(SectionLabel, { text: 'Rooms' })
-        : null,
-
-      ...p2p.joinedRooms.map(room => {
-        const isActive = isP2P && p2p.roomId === room.name;
-        const initial = room.name.charAt(0).toUpperCase();
-        return createElement(Orb, {
-          key: room.id,
-          pill: isActive ? 'full' : 'hover',
-          title: room.name + (room.isPrivate ? ' (private)' : ''),
-          onClick: () => {
-            if (!isP2P) store.setAppMode('p2p');
-            p2pStore.setActiveRoom(room.name);
-          },
-        },
-          createElement(OrbIcon, {
-            active: isActive,
-            className: isActive
-              ? 'bg-online text-white'
-              : 'bg-surface-variant text-on-surface-variant hover:bg-online/80 hover:text-white',
-          },
-            room.isPrivate
-              ? createElement('span', { className: 'material-symbols-rounded text-lg' }, 'lock')
-              : initial,
-          ),
-          isActive && p2p.peerList.length > 0
-            ? createElement(Badge, { count: p2p.peerList.length, color: 'bg-online' })
-            : null,
-        );
-      }),
     ),
 
     // ─── Settings orb (pinned bottom) ───

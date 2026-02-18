@@ -50,9 +50,9 @@ function loadSettings(): UserSettings {
   return { ...DEFAULT_SETTINGS };
 }
 
-export type AppMode = 'home' | 'irc' | 'p2p';
+export type AppMode = 'home' | 'irc';
 
-export type SettingsPage = 'app-general' | 'irc-appearance' | 'irc-notifications' | 'irc-general' | 'p2p-profile' | 'p2p-notifications' | 'p2p-about' | 'p2p-data';
+export type SettingsPage = 'app-general' | 'irc-appearance' | 'irc-notifications' | 'irc-general';
 
 export interface AppState {
   appMode: AppMode;
@@ -203,7 +203,6 @@ class Store {
       // Smart routing based on current mode
       if (this.state.appMode === 'home') target = 'app-general';
       else if (this.state.appMode === 'irc') target = 'irc-appearance';
-      else if (this.state.appMode === 'p2p') target = 'p2p-profile';
       else target = this.state.settingsPage;
     }
     this.setState({

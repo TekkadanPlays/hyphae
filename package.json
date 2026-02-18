@@ -1,5 +1,5 @@
 {
-  "name": "stoat-ui",
+  "name": "hyphae",
   "version": "0.2.0",
   "type": "module",
   "scripts": {
@@ -13,13 +13,11 @@
     "@scure/base": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "fun-animal-names": "^0.1.1",
     "hono": "^4.7.0",
     "inferno": "^8.2.3",
     "inferno-create-element": "^8.2.3",
     "inferno-server": "^8.2.3",
     "tailwind-merge": "^3.4.0",
-    "trystero": "^0.22.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
