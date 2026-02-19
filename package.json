@@ -18,7 +18,9 @@
     "inferno-create-element": "^8.2.3",
     "inferno-server": "^8.2.3",
     "tailwind-merge": "^3.4.0",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "kaji": "github:TekkadanPlays/kaji",
+    "blazecn": "github:TekkadanPlays/blazecn"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
