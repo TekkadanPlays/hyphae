@@ -84,7 +84,8 @@ Ergo IRC Server
 
 Hyphae is built on the shoulders of:
 
-- **[Stoat Chat](https://github.com/stoatchat/for-web)** — Original IRC frontend foundation
+- **[The Lounge](https://github.com/thelounge/thelounge)** — IRC client architecture and helpers
+- **[Stoat Chat](https://github.com/stoatchat/for-web)** — IRC frontend foundation (fork of The Lounge)
 - **[Kaji](https://github.com/TekkadanPlays/kaji)** — Nostr protocol library
 - **[BlazeCN](https://github.com/TekkadanPlays/blazecn)** — UI component primitives
 
