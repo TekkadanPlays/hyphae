@@ -325,6 +325,7 @@ export class IrcConnection {
 
   send(raw: string) {
     if (this.tcpSocket) {
+      console.log(`[IRC:${this.id}] >>> ${raw}`);
       this.tcpSocket.write(raw + '\r\n');
     }
   }
@@ -392,6 +393,7 @@ export class IrcConnection {
 
     for (const raw of lines) {
       if (raw.length === 0) continue;
+      console.log(`[IRC:${this.id}] <<< ${raw}`);
       this.handleLine(parseLine(raw));
     }
   }
