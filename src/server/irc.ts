@@ -141,6 +141,7 @@ export class IrcConnection {
         tls: this.options.tls ? { rejectUnauthorized: false } : false,
         socket: {
           open(socket) {
+            console.log(`[IRC:${self.id}] Socket opened to ${self.options.host}:${self.options.port}`);
             self._connected = true;
             self.lastDataTime = Date.now();
             self.reconnectAttempt = 0;
@@ -166,7 +167,9 @@ export class IrcConnection {
           },
           data(socket, data) {
             self.lastDataTime = Date.now(); // Any data = connection is alive
-            self.onData(Buffer.from(data).toString('utf-8'));
+            const str = Buffer.from(data).toString('utf-8');
+            console.log(`[IRC:${self.id}] RAW DATA (${str.length} bytes): ${JSON.stringify(str.slice(0, 500))}`);
+            self.onData(str);
           },
           close() {
             const wasConnected = self._connected;
@@ -633,6 +636,7 @@ export class IrcConnection {
 
   private handleCap(line: IrcLine) {
     const subcommand = line.params[1];
+    console.log(`[IRC:${this.id}] CAP subcommand=${subcommand} params=${JSON.stringify(line.params)}`);
 
     if (subcommand === 'LS') {
       // CAP LS can be multi-line: "CAP * LS * :cap1 cap2" then "CAP * LS :cap3 cap4"
