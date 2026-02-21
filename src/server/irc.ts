@@ -142,6 +142,10 @@ export class IrcConnection {
         socket: {
           open(socket) {
             console.log(`[IRC:${self.id}] Socket opened to ${self.options.host}:${self.options.port}`);
+            // IMPORTANT: self.tcpSocket is NOT yet assigned here — Bun.connect()
+            // resolves after open() fires. Use the socket param directly for
+            // registration commands, and also store it so send() works immediately.
+            self.tcpSocket = socket;
             self._connected = true;
             self.lastDataTime = Date.now();
             self.reconnectAttempt = 0;
