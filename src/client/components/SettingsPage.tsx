@@ -1,6 +1,7 @@
 import { createElement } from 'inferno-create-element';
+import { S } from 'blazecn';
 import { cn } from '../../lib/utils';
-import { store, type SettingsPage as SettingsPageType } from '../store';
+import { store, profileTick, type SettingsPage as SettingsPageType } from '../store';
 import { nostr } from '../nostr';
 import { Button } from 'blazecn/Button';
 import { Input } from 'blazecn/Input';
@@ -56,7 +57,9 @@ function RadioOption({ label, value, name, checked, onChange }: {
 // ─── Application Settings ───
 
 function AppGeneral() {
-  const state = store.getState();
+  const s = store.settings.value;
+  const pubkey = store.nostrPubkey.value;
+  profileTick.value;
   return createElement('div', { className: 'space-y-6' },
     createElement(SectionHeader, { icon: 'info', title: 'Hyphae' }),
     createElement('div', { className: 'pl-1 space-y-3' },
@@ -72,7 +75,7 @@ function AppGeneral() {
         variant: state.nostrPubkey ? 'secondary' : 'outline',
         className: state.nostrPubkey ? 'w-full border-online/30 text-online bg-online/10 hover:bg-online/15' : 'w-full',
         onClick: async () => {
-          if (state.nostrPubkey) return;
+          if (pubkey) return;
           try {
             const pubkey = await nostr.loginWithExtension();
             store.setNostrPubkey(pubkey);
@@ -80,16 +83,16 @@ function AppGeneral() {
         },
       },
         createElement('span', null, '\u26a1'),
-        state.nostrPubkey ? `Connected: ${state.nostrPubkey.slice(0, 16)}\u2026` : 'Connect Nostr Identity',
+        pubkey ? `Connected: ${pubkey.slice(0, 16)}\u2026` : 'Connect Nostr Identity',
       ),
-      state.nostrPubkey
+      pubkey
         ? createElement('div', {
             className: 'flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border text-xs font-mono text-muted-foreground cursor-pointer hover:bg-accent/30 transition-colors',
             title: 'Click to copy',
-            onClick: () => navigator.clipboard?.writeText(state.nostrPubkey!),
+            onClick: () => navigator.clipboard?.writeText(pubkey!),
           },
             createElement('span', { className: 'material-symbols-rounded text-sm flex-shrink-0' }, 'key'),
-            createElement('span', { className: 'truncate' }, state.nostrPubkey),
+            createElement('span', { className: 'truncate' }, pubkey),
             createElement('span', { className: 'material-symbols-rounded text-sm flex-shrink-0 ml-auto' }, 'content_copy'),
           )
         : null,
@@ -105,7 +108,7 @@ function AppGeneral() {
 // ─── IRC Settings Sections ───
 
 function IrcAppearance() {
-  const { settings } = store.getState();
+  const settings = store.settings.value;
   return createElement('div', { className: 'space-y-6' },
     createElement(SectionHeader, { icon: 'chat', title: 'Messages' }),
     createElement('div', { className: 'space-y-1 pl-1' },
@@ -145,7 +148,7 @@ function IrcAppearance() {
 }
 
 function IrcNotifications() {
-  const { settings } = store.getState();
+  const settings = store.settings.value;
   return createElement('div', { className: 'space-y-6' },
     createElement(SectionHeader, { icon: 'notifications', title: 'Browser Notifications' }),
     createElement('div', { className: 'space-y-1 pl-1' },
@@ -186,8 +189,8 @@ function IrcNotifications() {
 }
 
 function IrcGeneral() {
-  const state = store.getState();
-  const { settings } = state;
+  const pubkey = store.nostrPubkey.value;
+  const settings = store.settings.value;
   return createElement('div', { className: 'space-y-6' },
     createElement(SectionHeader, { icon: 'schedule', title: 'Away Message' }),
     createElement('div', { className: 'pl-1' },
@@ -202,7 +205,7 @@ function IrcGeneral() {
         variant: state.nostrPubkey ? 'secondary' : 'outline',
         className: state.nostrPubkey ? 'w-full border-online/30 text-online bg-online/10 hover:bg-online/15' : 'w-full',
         onClick: async () => {
-          if (state.nostrPubkey) return;
+          if (pubkey) return;
           try {
             const pubkey = await nostr.loginWithExtension();
             store.setNostrPubkey(pubkey);
@@ -210,16 +213,16 @@ function IrcGeneral() {
         },
       },
         createElement('span', null, '⚡'),
-        state.nostrPubkey ? `Connected: ${state.nostrPubkey.slice(0, 16)}…` : 'Connect Nostr Identity',
+        pubkey ? `Connected: ${pubkey.slice(0, 16)}…` : 'Connect Nostr Identity',
       ),
-      state.nostrPubkey
+      pubkey
         ? createElement('div', {
             className: 'flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border text-xs font-mono text-muted-foreground cursor-pointer hover:bg-accent/30 transition-colors',
             title: 'Click to copy',
-            onClick: () => navigator.clipboard?.writeText(state.nostrPubkey!),
+            onClick: () => navigator.clipboard?.writeText(pubkey!),
           },
             createElement('span', { className: 'material-symbols-rounded text-sm flex-shrink-0' }, 'key'),
-            createElement('span', { className: 'truncate' }, state.nostrPubkey),
+            createElement('span', { className: 'truncate' }, pubkey),
             createElement('span', { className: 'material-symbols-rounded text-sm flex-shrink-0 ml-auto' }, 'content_copy'),
           )
         : null,
@@ -265,9 +268,9 @@ const CONTENT_MAP: Record<SettingsPageType, () => any> = {
 // ─── Main SettingsPage ───
 
 export function SettingsPage() {
-  const state = store.getState();
-  const activePage = state.settingsPage;
-  const sidebarWidth = state.sidebarWidth;
+  return S(() => {
+    const activePage = store.settingsPage.value;
+    const sbWidth = store.sidebarWidth.value;
 
   const ContentComponent = CONTENT_MAP[activePage];
 
@@ -277,7 +280,7 @@ export function SettingsPage() {
     // Sidebar nav
     createElement('div', {
       className: 'flex-shrink-0 border-r border-border overflow-y-auto bg-surface-high',
-      style: { width: `${sidebarWidth}px` },
+        style: { width: `${sbWidth}px` },
     },
       // Header
       createElement('div', { className: 'flex items-center h-12 px-4 flex-shrink-0 border-b border-border gap-2' },
@@ -320,5 +323,6 @@ export function SettingsPage() {
         ContentComponent ? createElement(ContentComponent, null) : null,
       ),
     ),
-  );
+    );
+  });
 }

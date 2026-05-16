@@ -1,11 +1,19 @@
-// Client-side state store for the IRC client
+// Client-side state store — Preact Signals architecture
+// Every signal change surgically re-renders only the S() subtrees that read it.
+// No more store.subscribe(() => mount()) — the entire-app-re-render is dead.
+
+import { signal, computed, batch } from '@preact/signals-core';
 import type {
   IrcNetwork, IrcChannel, IrcMessage, IrcUser,
   ServerEvent, ConnectOptions,
 } from '../shared/types';
 import { socket } from './socket';
 
-type Listener = () => void;
+// ─── Types ───
+
+export type AppMode = 'home' | 'irc';
+
+export type SettingsPage = 'app-general' | 'irc-appearance' | 'irc-notifications' | 'irc-general';
 
 export interface UserSettings {
   // Appearance
@@ -50,506 +58,389 @@ function loadSettings(): UserSettings {
   return { ...DEFAULT_SETTINGS };
 }
 
-export type AppMode = 'home' | 'irc';
+// ─── Signals (granular reactive state) ───
 
-export type SettingsPage = 'app-general' | 'irc-appearance' | 'irc-notifications' | 'irc-general';
+const appMode = signal<AppMode>('home');
+const previousMode = signal<AppMode>('home');
+const networks = signal<IrcNetwork[]>([]);
+const activeNetworkId = signal<string | null>(null);
+const activeChannelName = signal<string | null>(null);
+const sidebarOpen = signal(true);
+const sidebarWidth = signal(
+  parseInt(localStorage.getItem('hyphae:sidebarWidth') || '240', 10),
+);
+const userlistOpen = signal(true);
+const connectFormOpen = signal(false);
+const settingsOpen = signal(false);
+const settingsPage = signal<SettingsPage>('app-general');
+const nostrPubkey = signal<string | null>(null);
+const profilePanelPubkey = signal<string | null>(null);
+const settings = signal<UserSettings>(loadSettings());
 
-export interface AppState {
-  appMode: AppMode;
-  previousMode: AppMode;
-  networks: IrcNetwork[];
-  activeNetworkId: string | null;
-  activeChannelName: string | null;
-  sidebarOpen: boolean;
-  sidebarWidth: number;
-  userlistOpen: boolean;
-  connectFormOpen: boolean;
-  settingsOpen: boolean;
-  settingsPage: SettingsPage;
-  nostrPubkey: string | null;
-  profilePanelPubkey: string | null;
-  settings: UserSettings;
+// Bumped by nostr profile store to trigger re-renders in profile-reading components
+export const profileTick = signal(0);
+
+// ─── Computed ───
+
+const activeNetwork = computed(() => {
+  return networks.value.find(n => n.id === activeNetworkId.value);
+});
+
+const activeChannel = computed(() => {
+  const net = activeNetwork.value;
+  if (!net) return undefined;
+  return net.channels.find(c => c.name === activeChannelName.value);
+});
+
+// ─── Internal helpers ───
+
+function findNetwork(id: string): IrcNetwork | undefined {
+  return networks.value.find(n => n.id === id);
 }
 
-class Store {
-  private state: AppState = {
-    appMode: 'home',
-    previousMode: 'home',
-    networks: [],
-    activeNetworkId: null,
-    activeChannelName: null,
-    sidebarOpen: true,
-    sidebarWidth: parseInt(localStorage.getItem('hyphae:sidebarWidth') || '240', 10),
-    userlistOpen: true,
-    connectFormOpen: false,
-    settingsOpen: false,
-    settingsPage: 'app-general',
-    nostrPubkey: null,
-    profilePanelPubkey: null,
-    settings: loadSettings(),
-  };
+function findChannel(networkId: string, channelName: string): IrcChannel | undefined {
+  return findNetwork(networkId)?.channels.find(c => c.name === channelName);
+}
 
-  private listeners: Set<Listener> = new Set();
+// Mutate-then-touch: since we mutate network objects in-place, we must
+// create a new array reference so computed signals re-evaluate.
+function touchNetworks() {
+  networks.value = [...networks.value];
+}
 
-  constructor() {
-    socket.onEvent((event) => this.handleServerEvent(event));
+// ─── Server event handling ───
+
+function handleServerEvent(event: ServerEvent) {
+  switch (event.type) {
+    case 'network:new': {
+      const net = event.network;
+      batch(() => {
+        networks.value = [...networks.value, net];
+        if (net.channels.length > 0) {
+          activeNetworkId.value = net.id;
+          activeChannelName.value = net.channels[0].name;
+        }
+      });
+      break;
+    }
+    case 'network:status': {
+      const net = findNetwork(event.networkId);
+      if (net) {
+        net.connected = event.connected;
+        touchNetworks();
+      }
+      break;
+    }
+    case 'network:remove': {
+      batch(() => {
+        networks.value = networks.value.filter(n => n.id !== event.networkId);
+        if (activeNetworkId.value === event.networkId) {
+          if (networks.value.length > 0) {
+            activeNetworkId.value = networks.value[0].id;
+            activeChannelName.value = networks.value[0].channels[0]?.name || null;
+          } else {
+            activeNetworkId.value = null;
+            activeChannelName.value = null;
+            connectFormOpen.value = true;
+          }
+        }
+      });
+      break;
+    }
+    case 'channel:new': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      if (net.channels.find(c => c.name === event.channel.name)) break;
+      net.channels.push(event.channel);
+      batch(() => {
+        touchNetworks();
+        activeNetworkId.value = event.networkId;
+        activeChannelName.value = event.channel.name;
+      });
+      break;
+    }
+    case 'channel:remove': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      net.channels = net.channels.filter(c => c.name !== event.channelName);
+      batch(() => {
+        if (activeChannelName.value === event.channelName && activeNetworkId.value === event.networkId) {
+          activeChannelName.value = net.channels[0]?.name || null;
+        }
+        touchNetworks();
+      });
+      break;
+    }
+    case 'channel:topic': {
+      const ch = findChannel(event.networkId, event.channelName);
+      if (ch) {
+        ch.topic = event.topic;
+        if (event.setBy) ch.topicSetBy = event.setBy;
+        touchNetworks();
+      }
+      break;
+    }
+    case 'channel:users': {
+      const ch = findChannel(event.networkId, event.channelName);
+      if (ch) {
+        ch.users = event.users;
+        touchNetworks();
+      }
+      break;
+    }
+    case 'channel:user_join': {
+      const ch = findChannel(event.networkId, event.channelName);
+      if (ch) {
+        ch.users[event.user.nick] = event.user;
+        touchNetworks();
+      }
+      break;
+    }
+    case 'channel:user_part': {
+      const ch = findChannel(event.networkId, event.channelName);
+      if (ch) {
+        delete ch.users[event.nick];
+        touchNetworks();
+      }
+      break;
+    }
+    case 'channel:user_quit': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      for (const ch of net.channels) delete ch.users[event.nick];
+      touchNetworks();
+      break;
+    }
+    case 'channel:user_nick': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      for (const ch of net.channels) {
+        if (ch.users[event.oldNick]) {
+          const user = ch.users[event.oldNick];
+          delete ch.users[event.oldNick];
+          user.nick = event.newNick;
+          ch.users[event.newNick] = user;
+        }
+      }
+      touchNetworks();
+      break;
+    }
+    case 'message': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      let ch = net.channels.find(c => c.name === event.channelName);
+      if (!ch) {
+        ch = {
+          name: event.channelName, type: 'query' as any, topic: '',
+          joined: true, unread: 0, highlight: 0, users: {}, messages: [], muted: false,
+        };
+        net.channels.push(ch);
+      }
+      ch.messages.push(event.message);
+      if (ch.messages.length > 500) ch.messages = ch.messages.slice(-500);
+      const isActive = activeNetworkId.value === event.networkId
+        && activeChannelName.value === event.channelName;
+      if (!isActive && !event.message.self) {
+        ch.unread++;
+        if (event.message.highlight) ch.highlight++;
+      }
+      touchNetworks();
+      break;
+    }
+    case 'motd': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      const lobby = net.channels.find(c => c.type === 'lobby');
+      if (lobby) {
+        lobby.messages.push({
+          id: `motd_${Date.now()}`, time: Date.now(), type: 'motd' as any,
+          from: '', text: event.text, self: false,
+        });
+        touchNetworks();
+      }
+      break;
+    }
+    case 'error': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      const target = activeChannelName.value && activeNetworkId.value === event.networkId
+        ? findChannel(event.networkId, activeChannelName.value) : net.channels[0];
+      if (target) {
+        target.messages.push({
+          id: `err_${Date.now()}`, time: Date.now(), type: 'error' as any,
+          from: '', text: event.text, self: false,
+        });
+        touchNetworks();
+      }
+      break;
+    }
+    case 'nickserv': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      const lobby = net.channels.find(c => c.type === 'lobby');
+      if (lobby) {
+        lobby.messages.push({
+          id: `ns_${Date.now()}`, time: Date.now(), type: 'notice' as any,
+          from: 'NickServ', text: event.text, self: false,
+        });
+        touchNetworks();
+      }
+      break;
+    }
+    case 'whois': {
+      const net = findNetwork(event.networkId);
+      if (!net) break;
+      const target = (activeNetworkId.value === event.networkId && activeChannelName.value)
+        ? findChannel(event.networkId, activeChannelName.value) : net.channels[0];
+      if (!target) break;
+      target.messages.push({
+        id: `whois_${Date.now()}`, time: Date.now(), type: 'whois' as any,
+        from: '', text: `WHOIS ${event.nick}:\n${event.lines.join('\n')}`, self: false,
+      });
+      touchNetworks();
+      break;
+    }
   }
+}
 
-  getState(): AppState {
-    return this.state;
-  }
+// Wire up WebSocket → signals
+socket.onEvent((event) => handleServerEvent(event));
 
-  subscribe(listener: Listener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
+// ─── Public store ───
 
-  private notify() {
-    for (const fn of this.listeners) fn();
-  }
+export const store = {
+  // Signals — read .value inside S() for reactive updates
+  appMode,
+  previousMode,
+  networks,
+  activeNetworkId,
+  activeChannelName,
+  sidebarOpen,
+  sidebarWidth,
+  userlistOpen,
+  connectFormOpen,
+  settingsOpen,
+  settingsPage,
+  nostrPubkey,
+  profilePanelPubkey,
+  settings,
 
-  private setState(partial: Partial<AppState>) {
-    this.state = { ...this.state, ...partial };
-    this.notify();
-  }
+  // Computed signals
+  activeNetwork,
+  activeChannel,
 
-  // --- Actions ---
+  // ─── Actions ───
 
   connect(options: ConnectOptions) {
     socket.send({ type: 'connect', network: options });
-    this.setState({ connectFormOpen: false });
-  }
+    connectFormOpen.value = false;
+  },
 
   disconnect(networkId: string) {
     socket.send({ type: 'disconnect', networkId });
-  }
+  },
 
   sendMessage(text: string) {
-    const { activeNetworkId, activeChannelName } = this.state;
-    if (!activeNetworkId || !activeChannelName) return;
-    socket.send({ type: 'message', networkId: activeNetworkId, target: activeChannelName, text });
-  }
+    const netId = activeNetworkId.value;
+    const chanName = activeChannelName.value;
+    if (!netId || !chanName) return;
+    socket.send({ type: 'message', networkId: netId, target: chanName, text });
+  },
 
   joinChannel(channel: string, key?: string) {
-    const { activeNetworkId } = this.state;
-    if (!activeNetworkId) return;
-    socket.send({ type: 'join', networkId: activeNetworkId, channel, key });
-  }
+    const netId = activeNetworkId.value;
+    if (!netId) return;
+    socket.send({ type: 'join', networkId: netId, channel, key });
+  },
 
   partChannel(channel: string) {
-    const { activeNetworkId } = this.state;
-    if (!activeNetworkId) return;
-    socket.send({ type: 'part', networkId: activeNetworkId, channel });
-  }
+    const netId = activeNetworkId.value;
+    if (!netId) return;
+    socket.send({ type: 'part', networkId: netId, channel });
+  },
 
   setActiveChannel(networkId: string, channelName: string) {
-    // Clear unread for the channel we're switching to
-    const network = this.state.networks.find(n => n.id === networkId);
+    const network = findNetwork(networkId);
     if (network) {
-      const channel = network.channels.find(c => c.name === channelName);
-      if (channel) {
-        channel.unread = 0;
-        channel.highlight = 0;
-      }
+      const ch = network.channels.find(c => c.name === channelName);
+      if (ch) { ch.unread = 0; ch.highlight = 0; }
     }
-    this.setState({ activeNetworkId: networkId, activeChannelName: channelName });
-  }
+    batch(() => {
+      activeNetworkId.value = networkId;
+      activeChannelName.value = channelName;
+      touchNetworks();
+    });
+  },
 
   toggleSidebar() {
-    // Prevent collapsing while settings page is open (it needs the sidebar)
-    if (this.state.settingsOpen && this.state.sidebarOpen) return;
-    this.setState({ sidebarOpen: !this.state.sidebarOpen });
-  }
+    if (settingsOpen.value && sidebarOpen.value) return;
+    sidebarOpen.value = !sidebarOpen.value;
+  },
 
   setSidebarWidth(width: number) {
     const clamped = Math.max(160, Math.min(420, width));
     localStorage.setItem('hyphae:sidebarWidth', String(clamped));
-    this.setState({ sidebarWidth: clamped });
-  }
+    sidebarWidth.value = clamped;
+  },
 
-  toggleUserlist() {
-    this.setState({ userlistOpen: !this.state.userlistOpen });
-  }
-
-  openConnectForm() {
-    this.setState({ connectFormOpen: true });
-  }
-
-  closeConnectForm() {
-    this.setState({ connectFormOpen: false });
-  }
+  toggleUserlist() { userlistOpen.value = !userlistOpen.value; },
+  openConnectForm() { connectFormOpen.value = true; },
+  closeConnectForm() { connectFormOpen.value = false; },
 
   setAppMode(mode: AppMode) {
-    if (mode !== this.state.appMode) {
-      this.setState({ appMode: mode, previousMode: this.state.appMode, settingsOpen: false });
+    if (mode !== appMode.value) {
+      batch(() => {
+        previousMode.value = appMode.value;
+        appMode.value = mode;
+        settingsOpen.value = false;
+      });
     }
-  }
+  },
 
-  setNostrPubkey(pubkey: string | null) {
-    this.setState({ nostrPubkey: pubkey });
-  }
-
-  openProfile(pubkey: string) {
-    this.setState({ profilePanelPubkey: pubkey });
-  }
-
-  closeProfile() {
-    this.setState({ profilePanelPubkey: null });
-  }
+  setNostrPubkey(pubkey: string | null) { nostrPubkey.value = pubkey; },
+  openProfile(pubkey: string) { profilePanelPubkey.value = pubkey; },
+  closeProfile() { profilePanelPubkey.value = null; },
 
   openSettings(page?: SettingsPage) {
     let target = page;
     if (!target) {
-      // Smart routing based on current mode
-      if (this.state.appMode === 'home') target = 'app-general';
-      else if (this.state.appMode === 'irc') target = 'irc-appearance';
-      else target = this.state.settingsPage;
+      if (appMode.value === 'home') target = 'app-general';
+      else if (appMode.value === 'irc') target = 'irc-appearance';
+      else target = settingsPage.value;
     }
-    this.setState({
-      settingsOpen: true,
-      settingsPage: target,
-    });
-  }
+    batch(() => { settingsOpen.value = true; settingsPage.value = target!; });
+  },
 
-  setSettingsPage(page: SettingsPage) {
-    this.setState({ settingsPage: page });
-  }
-
-  closeSettings() {
-    this.setState({ settingsOpen: false });
-  }
+  setSettingsPage(page: SettingsPage) { settingsPage.value = page; },
+  closeSettings() { settingsOpen.value = false; },
 
   updateSetting<K extends keyof UserSettings>(key: K, value: UserSettings[K]) {
-    const settings = { ...this.state.settings, [key]: value };
-    localStorage.setItem('hyphae:settings', JSON.stringify(settings));
-    this.setState({ settings });
-  }
+    const updated = { ...settings.value, [key]: value };
+    localStorage.setItem('hyphae:settings', JSON.stringify(updated));
+    settings.value = updated;
+  },
 
   nostrRegister(password: string, nostrId: string) {
-    const { activeNetworkId } = this.state;
-    if (!activeNetworkId) return;
-    socket.send({ type: 'nostr_register', networkId: activeNetworkId, password, nostrId });
-  }
+    const netId = activeNetworkId.value;
+    if (!netId) return;
+    socket.send({ type: 'nostr_register', networkId: netId, password, nostrId });
+  },
 
   nostrVerify(account: string, code: string) {
-    const { activeNetworkId } = this.state;
-    if (!activeNetworkId) return;
-    socket.send({ type: 'nostr_verify', networkId: activeNetworkId, account, code });
-  }
+    const netId = activeNetworkId.value;
+    if (!netId) return;
+    socket.send({ type: 'nostr_verify', networkId: netId, account, code });
+  },
 
   nostrIdentify(account: string, password: string) {
-    const { activeNetworkId } = this.state;
-    if (!activeNetworkId) return;
-    socket.send({ type: 'nostr_identify', networkId: activeNetworkId, account, password });
-  }
+    const netId = activeNetworkId.value;
+    if (!netId) return;
+    socket.send({ type: 'nostr_identify', networkId: netId, account, password });
+  },
 
   sendWhois(nick: string) {
-    const { activeNetworkId } = this.state;
-    if (!activeNetworkId) return;
-    socket.send({ type: 'whois', networkId: activeNetworkId, nick });
-  }
-
-  // --- Helpers ---
-
-  getActiveNetwork(): IrcNetwork | undefined {
-    return this.state.networks.find(n => n.id === this.state.activeNetworkId);
-  }
-
-  getActiveChannel(): IrcChannel | undefined {
-    const network = this.getActiveNetwork();
-    if (!network) return undefined;
-    return network.channels.find(c => c.name === this.state.activeChannelName);
-  }
-
-  // --- Server event handling ---
-
-  private handleServerEvent(event: ServerEvent) {
-    switch (event.type) {
-      case 'network:new':
-        this.onNetworkNew(event.network);
-        break;
-      case 'network:status':
-        this.onNetworkStatus(event.networkId, event.connected);
-        break;
-      case 'network:remove':
-        this.onNetworkRemove(event.networkId);
-        break;
-      case 'channel:new':
-        this.onChannelNew(event.networkId, event.channel);
-        break;
-      case 'channel:remove':
-        this.onChannelRemove(event.networkId, event.channelName);
-        break;
-      case 'channel:topic':
-        this.onChannelTopic(event.networkId, event.channelName, event.topic, event.setBy);
-        break;
-      case 'channel:users':
-        this.onChannelUsers(event.networkId, event.channelName, event.users);
-        break;
-      case 'channel:user_join':
-        this.onChannelUserJoin(event.networkId, event.channelName, event.user);
-        break;
-      case 'channel:user_part':
-        this.onChannelUserPart(event.networkId, event.channelName, event.nick);
-        break;
-      case 'channel:user_quit':
-        this.onUserQuit(event.networkId, event.nick);
-        break;
-      case 'channel:user_nick':
-        this.onUserNick(event.networkId, event.oldNick, event.newNick);
-        break;
-      case 'message':
-        this.onMessage(event.networkId, event.channelName, event.message);
-        break;
-      case 'motd':
-        this.onMotd(event.networkId, event.text);
-        break;
-      case 'error':
-        this.onError(event.networkId, event.text);
-        break;
-      case 'nickserv':
-        this.onNickServ(event.networkId, event.text);
-        break;
-      case 'whois':
-        this.onWhois(event.networkId, event.nick, event.lines);
-        break;
-    }
-  }
-
-  private findNetwork(id: string): IrcNetwork | undefined {
-    return this.state.networks.find(n => n.id === id);
-  }
-
-  private findChannel(networkId: string, channelName: string): IrcChannel | undefined {
-    const network = this.findNetwork(networkId);
-    return network?.channels.find(c => c.name === channelName);
-  }
-
-  private onNetworkNew(network: IrcNetwork) {
-    this.state.networks.push(network);
-    // Auto-select the lobby
-    if (network.channels.length > 0) {
-      this.state.activeNetworkId = network.id;
-      this.state.activeChannelName = network.channels[0].name;
-    }
-    this.notify();
-  }
-
-  private onNetworkStatus(networkId: string, connected: boolean) {
-    const network = this.findNetwork(networkId);
-    if (network) {
-      network.connected = connected;
-      this.notify();
-    }
-  }
-
-  private onNetworkRemove(networkId: string) {
-    this.state.networks = this.state.networks.filter(n => n.id !== networkId);
-    if (this.state.activeNetworkId === networkId) {
-      if (this.state.networks.length > 0) {
-        this.state.activeNetworkId = this.state.networks[0].id;
-        this.state.activeChannelName = this.state.networks[0].channels[0]?.name || null;
-      } else {
-        this.state.activeNetworkId = null;
-        this.state.activeChannelName = null;
-        this.state.connectFormOpen = true;
-      }
-    }
-    this.notify();
-  }
-
-  private onChannelNew(networkId: string, channel: IrcChannel) {
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-    // Don't add duplicate
-    if (network.channels.find(c => c.name === channel.name)) return;
-    network.channels.push(channel);
-    // Auto-switch to the new channel
-    this.state.activeNetworkId = networkId;
-    this.state.activeChannelName = channel.name;
-    this.notify();
-  }
-
-  private onChannelRemove(networkId: string, channelName: string) {
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-    network.channels = network.channels.filter(c => c.name !== channelName);
-    if (this.state.activeChannelName === channelName && this.state.activeNetworkId === networkId) {
-      this.state.activeChannelName = network.channels[0]?.name || null;
-    }
-    this.notify();
-  }
-
-  private onChannelTopic(networkId: string, channelName: string, topic: string, setBy?: string) {
-    const channel = this.findChannel(networkId, channelName);
-    if (channel) {
-      channel.topic = topic;
-      if (setBy) channel.topicSetBy = setBy;
-      this.notify();
-    }
-  }
-
-  private onChannelUsers(networkId: string, channelName: string, users: Record<string, IrcUser>) {
-    const channel = this.findChannel(networkId, channelName);
-    if (channel) {
-      channel.users = users;
-      this.notify();
-    }
-  }
-
-  private onChannelUserJoin(networkId: string, channelName: string, user: IrcUser) {
-    const channel = this.findChannel(networkId, channelName);
-    if (channel) {
-      channel.users[user.nick] = user;
-      this.notify();
-    }
-  }
-
-  private onChannelUserPart(networkId: string, channelName: string, nick: string) {
-    const channel = this.findChannel(networkId, channelName);
-    if (channel) {
-      delete channel.users[nick];
-      this.notify();
-    }
-  }
-
-  private onUserQuit(networkId: string, nick: string) {
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-    for (const channel of network.channels) {
-      delete channel.users[nick];
-    }
-    this.notify();
-  }
-
-  private onUserNick(networkId: string, oldNick: string, newNick: string) {
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-    for (const channel of network.channels) {
-      if (channel.users[oldNick]) {
-        const user = channel.users[oldNick];
-        delete channel.users[oldNick];
-        user.nick = newNick;
-        channel.users[newNick] = user;
-      }
-    }
-    this.notify();
-  }
-
-  private onMessage(networkId: string, channelName: string, message: IrcMessage) {
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-
-    // Find or create channel (for queries)
-    let channel = network.channels.find(c => c.name === channelName);
-    if (!channel) {
-      // Auto-create query channel
-      channel = {
-        name: channelName,
-        type: 'query' as any,
-        topic: '',
-        joined: true,
-        unread: 0,
-        highlight: 0,
-        users: {},
-        messages: [],
-        muted: false,
-      };
-      network.channels.push(channel);
-    }
-
-    channel.messages.push(message);
-
-    // Cap messages at 500
-    if (channel.messages.length > 500) {
-      channel.messages = channel.messages.slice(-500);
-    }
-
-    // Update unread if not the active channel
-    const isActive = this.state.activeNetworkId === networkId && this.state.activeChannelName === channelName;
-    if (!isActive && !message.self) {
-      channel.unread++;
-      if (message.highlight) channel.highlight++;
-    }
-
-    this.notify();
-  }
-
-  private onMotd(networkId: string, text: string) {
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-    const lobby = network.channels.find(c => c.type === 'lobby');
-    if (lobby) {
-      lobby.messages.push({
-        id: `motd_${Date.now()}`,
-        time: Date.now(),
-        type: 'motd' as any,
-        from: '',
-        text,
-        self: false,
-      });
-      this.notify();
-    }
-  }
-
-  private onError(networkId: string, text: string) {
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-    // Push error to active channel or lobby
-    const target = this.state.activeChannelName && this.state.activeNetworkId === networkId
-      ? this.findChannel(networkId, this.state.activeChannelName)
-      : network.channels[0];
-    if (target) {
-      target.messages.push({
-        id: `err_${Date.now()}`,
-        time: Date.now(),
-        type: 'error' as any,
-        from: '',
-        text,
-        self: false,
-      });
-      this.notify();
-    }
-  }
-
-  private onNickServ(networkId: string, text: string) {
-    // Push NickServ messages to the lobby
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-    const lobby = network.channels.find(c => c.type === 'lobby');
-    if (lobby) {
-      lobby.messages.push({
-        id: `ns_${Date.now()}`,
-        time: Date.now(),
-        type: 'notice' as any,
-        from: 'NickServ',
-        text,
-        self: false,
-      });
-      this.notify();
-    }
-  }
-
-  private onWhois(networkId: string, nick: string, lines: string[]) {
-    const network = this.findNetwork(networkId);
-    if (!network) return;
-    // Show WHOIS in the active channel or lobby
-    const target = (this.state.activeNetworkId === networkId && this.state.activeChannelName)
-      ? this.findChannel(networkId, this.state.activeChannelName)
-      : network.channels[0];
-    if (!target) return;
-
-    const text = `WHOIS ${nick}:\n${lines.join('\n')}`;
-    target.messages.push({
-      id: `whois_${Date.now()}`,
-      time: Date.now(),
-      type: 'whois' as any,
-      from: '',
-      text,
-      self: false,
-    });
-    this.notify();
-  }
-}
-
-export const store = new Store();
+    const netId = activeNetworkId.value;
+    if (!netId) return;
+    socket.send({ type: 'whois', networkId: netId, nick });
+  },
+};

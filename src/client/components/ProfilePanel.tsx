@@ -1,10 +1,13 @@
 import { createElement } from 'inferno-create-element';
+import { S } from 'blazecn';
 import { cn } from '../../lib/utils';
-import { store } from '../store';
+import { profileTick } from '../store';
 import { nostr } from '../nostr';
 
 export function ProfilePanel({ pubkey, onClose }: { pubkey: string; onClose: () => void }) {
-  const profile = nostr.getProfile(pubkey);
+  return S(() => {
+    profileTick.value;
+    const profile = nostr.getProfile(pubkey);
   const shortPubkey = pubkey.slice(0, 8) + '…' + pubkey.slice(-8);
 
   // Trigger fetch if we don't have it yet
@@ -140,5 +143,6 @@ export function ProfilePanel({ pubkey, onClose }: { pubkey: string; onClose: () 
         }, 'Close'),
       ),
     ),
-  );
+    );
+  });
 }

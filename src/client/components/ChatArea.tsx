@@ -1,4 +1,5 @@
 import { createElement } from 'inferno-create-element';
+import { S } from 'blazecn';
 import { cn } from '../../lib/utils';
 import { store } from '../store';
 import { nostr } from '../nostr';
@@ -90,7 +91,7 @@ function renderParsedText(text: string, users: string[] = []): any[] {
         key: `p${pi}`,
         className: 'text-primary cursor-pointer hover:underline',
         onClick: () => {
-          const net = store.getActiveNetwork();
+          const net = store.activeNetwork.value;
           if (net) {
             const existing = net.channels.find(c => c.name === part.channel);
             if (existing) {
@@ -122,7 +123,7 @@ function NickAvatar({ nick }: { nick: string }) {
 }
 
 function MessageItem({ msg, grouped }: { msg: IrcMessage; grouped: boolean }) {
-  const channel = store.getActiveChannel();
+  const channel = store.activeChannel.value;
   const users = channel?.users ? Object.keys(channel.users) : [];
 
   // WHOIS display
@@ -262,10 +263,11 @@ function MessageItem({ msg, grouped }: { msg: IrcMessage; grouped: boolean }) {
 }
 
 function ChatInput() {
-  const channel = store.getActiveChannel();
-  const placeholder = channel ? `Message ${channel.name}` : 'Select a channel';
+  return S(() => {
+    const channel = store.activeChannel.value;
+    const placeholder = channel ? `Message ${channel.name}` : 'Select a channel';
 
-  return createElement('div', {
+    return createElement('div', {
     className: 'px-4 pb-4 pt-2',
   },
     createElement('form', {
@@ -296,13 +298,14 @@ function ChatInput() {
         createElement('span', { className: 'material-symbols-rounded text-xl' }, 'send'),
       ),
     ),
-  );
+    );
+  });
 }
 
 export function ChatArea() {
-  const state = store.getState();
-  const network = store.getActiveNetwork();
-  const channel = store.getActiveChannel();
+  return S(() => {
+    const network = store.activeNetwork.value;
+    const channel = store.activeChannel.value;
 
   if (!network || !channel) {
     return createElement('div', {
@@ -408,4 +411,5 @@ export function ChatArea() {
     // Chat input
     createElement(ChatInput, null),
   );
+  });
 }

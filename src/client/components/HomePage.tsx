@@ -1,11 +1,12 @@
 import { createElement } from 'inferno-create-element';
+import { S, signal } from 'blazecn';
 import { cn } from '../../lib/utils';
-import { store } from '../store';
+import { store, profileTick } from '../store';
 import { nostr } from '../nostr';
 import { Separator } from 'blazecn/Separator';
 
 // Track which home tab is active
-let _homeTab: 'lander' | 'profile' = 'lander';
+const _homeTab = signal<'lander' | 'profile'>('lander');
 
 // ─── Lander tab ───
 
@@ -45,12 +46,15 @@ function StatCard({ icon, label, value }: { icon: string; label: string; value: 
 }
 
 function LanderContent() {
-  const state = store.getState();
-  const profile = state.nostrPubkey ? nostr.getProfile(state.nostrPubkey) : null;
-  const displayName = profile?.displayName || profile?.name || null;
+  return S(() => {
+    const nets = store.networks.value;
+    const pubkey = store.nostrPubkey.value;
+    profileTick.value;
+    const profile = pubkey ? nostr.getProfile(pubkey) : null;
+    const displayName = profile?.displayName || profile?.name || null;
 
-  const connectedNetworks = state.networks.filter(n => n.connected).length;
-  const totalChannels = state.networks.reduce((sum, n) => sum + n.channels.length, 0);
+    const connectedNetworks = nets.filter(n => n.connected).length;
+    const totalChannels = nets.reduce((sum, n) => sum + n.channels.length, 0);
 
   return createElement('div', { className: 'max-w-2xl mx-auto px-6 py-10' },
     // Welcome header
@@ -98,17 +102,20 @@ function LanderContent() {
         '⋆˙𓍊₊ ⊹˚ 𖥧𓋼˖°𓆑˙⋆',
       ),
     ),
-  );
+    );
+  });
 }
 
 // ─── Profile tab ───
 
 function ProfileContent() {
-  const state = store.getState();
-  const profile = state.nostrPubkey ? nostr.getProfile(state.nostrPubkey) : null;
-  const displayName = profile?.displayName || profile?.name || null;
+  return S(() => {
+    const pubkey = store.nostrPubkey.value;
+    profileTick.value;
+    const profile = pubkey ? nostr.getProfile(pubkey) : null;
+    const displayName = profile?.displayName || profile?.name || null;
 
-  if (!state.nostrPubkey) {
+    if (!pubkey) {
     // Not signed in — prompt
     return createElement('div', { className: 'max-w-md mx-auto px-6 py-16 text-center' },
       createElement('div', {
@@ -174,10 +181,10 @@ function ProfileContent() {
     createElement('div', {
       className: 'rounded-lg border border-border/50 bg-surface-high/30 p-3 mb-4 cursor-pointer hover:bg-surface-high/50 transition-colors',
       title: 'Click to copy',
-      onClick: () => navigator.clipboard?.writeText(state.nostrPubkey!),
+      onClick: () => navigator.clipboard?.writeText(pubkey!),
     },
       createElement('p', { className: 'text-[10px] text-muted-foreground uppercase tracking-wider mb-1' }, 'Public Key'),
-      createElement('p', { className: 'text-xs text-foreground font-mono break-all leading-relaxed' }, state.nostrPubkey),
+      createElement('p', { className: 'text-xs text-foreground font-mono break-all leading-relaxed' }, pubkey),
     ),
 
     // Bio
@@ -191,17 +198,19 @@ function ProfileContent() {
     createElement('p', { className: 'text-[10px] text-muted-foreground/25 font-mono select-none text-center mt-8' },
       '𓍊𓋼𓆏𓋼𓍊',
     ),
-  );
+    );
+  });
 }
 
 // ─── Home sidebar + content ───
 
 function HomeSidebar() {
-  const state = store.getState();
-  const sidebarWidth = state.sidebarWidth;
+  return S(() => {
+    const sbWidth = store.sidebarWidth.value;
+    const tab = _homeTab.value;
 
   function NavBtn({ id, icon, label }: { id: 'lander' | 'profile'; icon: string; label: string }) {
-    const active = _homeTab === id;
+    const active = tab === id;
     return createElement('button', {
       className: cn(
         'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer',
@@ -209,7 +218,7 @@ function HomeSidebar() {
           ? 'bg-accent text-accent-foreground font-medium'
           : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
       ),
-      onClick: () => { _homeTab = id; store['notify'](); },
+      onClick: () => { _homeTab.value = id; },
     },
       createElement('span', { className: 'material-symbols-rounded text-base flex-shrink-0' }, icon),
       label,
@@ -218,7 +227,7 @@ function HomeSidebar() {
 
   return createElement('div', {
     className: 'flex-shrink-0 border-r border-border overflow-y-auto bg-surface-high flex flex-col',
-    style: { width: `${sidebarWidth}px` },
+    style: { width: `${sbWidth}px` },
   },
     createElement('div', { className: 'flex items-center h-12 px-4 flex-shrink-0 border-b border-border gap-2' },
       createElement('h2', { className: 'text-sm font-semibold text-on-surface flex-1' }, 'Hyphae'),
@@ -228,19 +237,23 @@ function HomeSidebar() {
       createElement(NavBtn, { id: 'profile', icon: 'person', label: 'Profile' }),
     ),
   );
+  });
 }
 
 export function HomePage() {
-  const state = store.getState();
+  return S(() => {
+    const sbOpen = store.sidebarOpen.value;
+    const tab = _homeTab.value;
 
-  return createElement('div', { className: 'flex flex-1 min-w-0 overflow-hidden' },
-    state.sidebarOpen
-      ? createElement(HomeSidebar, null)
-      : null,
-    createElement('div', { className: 'flex-1 overflow-y-auto' },
-      _homeTab === 'lander'
-        ? createElement(LanderContent, null)
-        : createElement(ProfileContent, null),
-    ),
-  );
+    return createElement('div', { className: 'flex flex-1 min-w-0 overflow-hidden' },
+      sbOpen
+        ? createElement(HomeSidebar, null)
+        : null,
+      createElement('div', { className: 'flex-1 overflow-y-auto' },
+        tab === 'lander'
+          ? createElement(LanderContent, null)
+          : createElement(ProfileContent, null),
+      ),
+    );
+  });
 }

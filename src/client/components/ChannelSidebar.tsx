@@ -1,21 +1,25 @@
 import { createElement } from 'inferno-create-element';
+import { S } from 'blazecn';
 import { cn } from '../../lib/utils';
 import { store } from '../store';
 import { Button } from 'blazecn/Button';
 import { Separator } from 'blazecn/Separator';
 
 export function ChannelSidebar() {
-  const state = store.getState();
-  const network = store.getActiveNetwork();
-  if (!network) return null;
+  return S(() => {
+    const network = store.activeNetwork.value;
+    if (!network) return null;
 
-  const channels = network.channels.filter(c => c.type === 'channel');
-  const queries = network.channels.filter(c => c.type === 'query');
-  const lobby = network.channels.find(c => c.type === 'lobby');
+    const sbWidth = store.sidebarWidth.value;
+    const netId = store.activeNetworkId.value;
+    const chanName = store.activeChannelName.value;
+    const channels = network.channels.filter(c => c.type === 'channel');
+    const queries = network.channels.filter(c => c.type === 'query');
+    const lobby = network.channels.find(c => c.type === 'lobby');
 
   return createElement('div', {
     className: 'flex flex-col flex-shrink-0 bg-surface-high overflow-hidden',
-    style: { width: `${state.sidebarWidth}px` },
+      style: { width: `${sbWidth}px` },
   },
     // Network header
     createElement('div', {
@@ -48,7 +52,7 @@ export function ChannelSidebar() {
         ? createElement('a', {
             className: cn(
               'flex items-center gap-2 px-2 py-1.5 mx-2 rounded-lg cursor-pointer transition-colors duration-100',
-              state.activeChannelName === lobby.name && state.activeNetworkId === network.id
+              chanName === lobby.name && netId === network.id
                 ? 'bg-accent text-accent-foreground'
                 : 'text-on-surface-variant hover:bg-accent/50 hover:text-accent-foreground',
             ),
@@ -84,7 +88,7 @@ export function ChannelSidebar() {
 
       // Channel entries
       ...channels.map(channel => {
-        const isActive = state.activeChannelName === channel.name && state.activeNetworkId === network.id;
+        const isActive = chanName === channel.name && netId === network.id;
         return createElement('a', {
           key: channel.name,
           className: cn(
@@ -125,7 +129,7 @@ export function ChannelSidebar() {
 
       // Query entries
       ...queries.map(channel => {
-        const isActive = state.activeChannelName === channel.name && state.activeNetworkId === network.id;
+        const isActive = chanName === channel.name && netId === network.id;
         return createElement('a', {
           key: channel.name,
           className: cn(
@@ -164,5 +168,6 @@ export function ChannelSidebar() {
         'Join channel',
       ),
     ),
-  );
+    );
+  });
 }

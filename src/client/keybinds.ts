@@ -4,9 +4,9 @@
 import { store } from './store';
 
 function getAllChannels(): { networkId: string; channelName: string }[] {
-  const state = store.getState();
+  const nets = store.networks.value;
   const result: { networkId: string; channelName: string }[] = [];
-  for (const network of state.networks) {
+  for (const network of nets) {
     for (const channel of network.channels) {
       result.push({ networkId: network.id, channelName: channel.name });
     }
@@ -15,12 +15,11 @@ function getAllChannels(): { networkId: string; channelName: string }[] {
 }
 
 function navigateChannel(direction: number) {
-  const state = store.getState();
   const channels = getAllChannels();
   if (channels.length === 0) return;
 
   let index = channels.findIndex(
-    (c) => c.networkId === state.activeNetworkId && c.channelName === state.activeChannelName,
+    (c) => c.networkId === store.activeNetworkId.value && c.channelName === store.activeChannelName.value,
   );
 
   const length = channels.length;
@@ -31,10 +30,10 @@ function navigateChannel(direction: number) {
 }
 
 function jumpToUnread() {
-  const state = store.getState();
+  const nets = store.networks.value;
   let target: { networkId: string; channelName: string } | null = null;
 
-  for (const network of state.networks) {
+  for (const network of nets) {
     for (const chan of network.channels) {
       if (chan.highlight > 0) {
         target = { networkId: network.id, channelName: chan.name };
@@ -44,7 +43,7 @@ function jumpToUnread() {
         target = { networkId: network.id, channelName: chan.name };
       }
     }
-    if (target && state.networks.some(n => n.channels.some(c => c.highlight > 0))) break;
+    if (target && nets.some(n => n.channels.some(c => c.highlight > 0))) break;
   }
 
   if (target) {
@@ -79,12 +78,11 @@ export function initKeybinds() {
 
     // Escape: close modals
     if (e.key === 'Escape') {
-      const state = store.getState();
-      if (state.profilePanelPubkey) {
+      if (store.profilePanelPubkey.value) {
         store.closeProfile();
         return;
       }
-      if (state.connectFormOpen && state.networks.length > 0) {
+      if (store.connectFormOpen.value && store.networks.value.length > 0) {
         store.closeConnectForm();
         return;
       }

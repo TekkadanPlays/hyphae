@@ -1,6 +1,7 @@
 import { createElement } from 'inferno-create-element';
+import { S } from 'blazecn';
 import { cn } from '../../lib/utils';
-import { store } from '../store';
+import { store, profileTick } from '../store';
 import { nostr } from '../nostr';
 import { Separator } from 'blazecn/Separator';
 
@@ -47,13 +48,20 @@ function SectionLabel({ text }: { text: string }) {
 }
 
 export function NetworkList() {
-  const state = store.getState();
-  const isHome = state.appMode === 'home';
-  const isIrc = state.appMode === 'irc';
+  return S(() => {
+    const mode = store.appMode.value;
+    const nets = store.networks.value;
+    const activeNetId = store.activeNetworkId.value;
+    const sbOpen = store.sidebarOpen.value;
+    const isSettingsOpen = store.settingsOpen.value;
+    const pubkey = store.nostrPubkey.value;
+    const isHome = mode === 'home';
+    const isIrc = mode === 'irc';
 
-  // Profile image from Nostr
-  const profile = state.nostrPubkey ? nostr.getProfile(state.nostrPubkey) : null;
-  const displayName = profile?.displayName || profile?.name || null;
+    // Read profileTick to re-render when nostr profiles update
+    profileTick.value;
+    const profile = pubkey ? nostr.getProfile(pubkey) : null;
+    const displayName = profile?.displayName || profile?.name || null;
 
   return createElement('div', {
     className: 'flex flex-col w-[72px] flex-shrink-0 bg-background border-r border-border/30',
@@ -83,12 +91,12 @@ export function NetworkList() {
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-surface-variant text-on-surface-variant hover:bg-primary/80 hover:text-primary-foreground',
             },
-              state.nostrPubkey
+              pubkey
                 ? (displayName ? displayName.charAt(0).toUpperCase() : '?')
                 : createElement('span', { className: 'material-symbols-rounded text-lg' }, 'person'),
             ),
         // Online indicator
-        state.nostrPubkey
+        pubkey
           ? createElement('div', {
               className: 'absolute bottom-1 right-1 size-3 rounded-full border-2 border-background bg-online',
             })
@@ -98,12 +106,12 @@ export function NetworkList() {
       createElement(Separator, { className: 'w-8 my-1 flex-shrink-0 mx-auto' }),
 
       // ─── IRC section ───
-      state.networks.length > 0
+      nets.length > 0
         ? createElement(SectionLabel, { text: 'IRC' })
         : null,
 
-      ...state.networks.map(network => {
-        const isActive = isIrc && network.id === state.activeNetworkId;
+      ...nets.map(network => {
+        const isActive = isIrc && network.id === activeNetId;
         const totalUnread = network.channels.reduce((sum: number, ch: any) => sum + ch.unread, 0);
         const totalHighlight = network.channels.reduce((sum: number, ch: any) => sum + ch.highlight, 0);
         const initial = network.name.charAt(0).toUpperCase();
@@ -114,12 +122,12 @@ export function NetworkList() {
           title: `${network.name} (${network.host})`,
           onClick: () => {
             if (!isIrc) store.setAppMode('irc');
-            if (isActive && state.sidebarOpen) {
+            if (isActive && sbOpen) {
               store.toggleSidebar();
             } else {
               const firstChan = network.channels[0];
               if (firstChan) store.setActiveChannel(network.id, firstChan.name);
-              if (!state.sidebarOpen) store.toggleSidebar();
+              if (!sbOpen) store.toggleSidebar();
             }
           },
         },
@@ -168,13 +176,13 @@ export function NetworkList() {
       className: 'flex flex-col items-center py-2',
     },
       createElement(Orb, {
-        pill: state.settingsOpen ? 'full' : 'hover',
-        onClick: () => state.settingsOpen ? store.closeSettings() : store.openSettings(),
+        pill: isSettingsOpen ? 'full' : 'hover',
+        onClick: () => isSettingsOpen ? store.closeSettings() : store.openSettings(),
         title: 'Settings',
       },
         createElement(OrbIcon, {
-          active: state.settingsOpen,
-          className: state.settingsOpen
+          active: isSettingsOpen,
+          className: isSettingsOpen
             ? 'bg-primary text-primary-foreground'
             : 'bg-surface-variant text-on-surface-variant hover:bg-surface-variant hover:text-foreground',
         },
@@ -182,5 +190,6 @@ export function NetworkList() {
         ),
       ),
     ),
-  );
+    );
+  });
 }

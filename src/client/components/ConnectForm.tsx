@@ -1,5 +1,6 @@
 import { createElement } from 'inferno-create-element';
-import { store } from '../store';
+import { S, signal } from 'blazecn';
+import { store, profileTick } from '../store';
 import { nostr } from '../nostr';
 import type { ConnectOptions } from '../../shared/types';
 import { Button } from 'blazecn/Button';
@@ -23,13 +24,18 @@ function HiddenBool({ name, value }: { name: string; value: boolean }) {
   return createElement('input', { type: 'hidden', name, value: value ? '1' : '' });
 }
 
-let _authTab = 'none';
-let _tls = true;
-let _nsRegister = false;
+const _authTab = signal('none');
+const _tls = signal(true);
+const _nsRegister = signal(false);
 
 export function ConnectForm() {
-  const state = store.getState();
-
+  return S(() => {
+    const pubkey = store.nostrPubkey.value;
+    const nets = store.networks.value;
+    profileTick.value; // re-render on profile updates
+    const authTab = _authTab.value;
+    const tls = _tls.value;
+    const nsRegister = _nsRegister.value;
   const onSubmit = (e: any) => {
     e.preventDefault();
     const f = e.target;
@@ -42,20 +48,20 @@ export function ConnectForm() {
       nick: f.elements.nick.value || 'hyphae_user',
       username: f.elements.username?.value || undefined,
       realname: f.elements.realname?.value || undefined,
-      password: _authTab === 'password' ? (f.elements.password?.value || undefined) : undefined,
-      saslAccount: _authTab === 'sasl' ? (f.elements.sasl_account?.value || undefined) : undefined,
-      saslPassword: _authTab === 'sasl' ? (f.elements.sasl_password?.value || undefined) : undefined,
+      password: authTab === 'password' ? (f.elements.password?.value || undefined) : undefined,
+      saslAccount: authTab === 'sasl' ? (f.elements.sasl_account?.value || undefined) : undefined,
+      saslPassword: authTab === 'sasl' ? (f.elements.sasl_password?.value || undefined) : undefined,
       autojoin: f.elements.autojoin.value
         ? f.elements.autojoin.value.split(',').map((s: string) => s.trim()).filter(Boolean)
         : undefined,
-      nickservPassword: _authTab === 'nostr' ? (nsPassword || undefined) : undefined,
-      nickservRegister: _authTab === 'nostr' ? (f.elements.ns_register_val?.value === '1' || undefined) : undefined,
-      nostrPubkey: (_authTab === 'nostr' && nsPassword && state.nostrPubkey) ? state.nostrPubkey : undefined,
+      nickservPassword: authTab === 'nostr' ? (nsPassword || undefined) : undefined,
+      nickservRegister: authTab === 'nostr' ? (f.elements.ns_register_val?.value === '1' || undefined) : undefined,
+      nostrPubkey: (authTab === 'nostr' && nsPassword && pubkey) ? pubkey : undefined,
     };
     store.connect(options);
   };
 
-  const setAuth = (t: string) => { _authTab = t; store['notify'](); };
+  const setAuth = (t: string) => { _authTab.value = t; };
 
   return createElement(Card, {
     className: 'w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col border-border/50 shadow-2xl',
@@ -107,10 +113,10 @@ export function ConnectForm() {
               createElement('div', { className: 'flex items-center gap-2 h-9' },
                 createElement(Switch, {
                   checked: _tls,
-                  onChange: (v: boolean) => { _tls = v; store['notify'](); },
+                  onChange: (v: boolean) => { _tls.value = v; },
                 }),
-                createElement('span', { className: 'text-sm text-muted-foreground' }, _tls ? 'TLS On' : 'TLS Off'),
-                createElement(HiddenBool, { name: 'tls_val', value: _tls }),
+                createElement('span', { className: 'text-sm text-muted-foreground' }, tls ? 'TLS On' : 'TLS Off'),
+                createElement(HiddenBool, { name: 'tls_val', value: tls }),
               ),
             ),
           ),
@@ -152,35 +158,35 @@ export function ConnectForm() {
             createElement('p', { className: 'text-xs text-muted-foreground' }, 'Choose how to authenticate with this server.'),
           ),
 
-          createElement(Tabs, { value: _authTab, className: 'w-full' },
+          createElement(Tabs, { value: authTab, className: 'w-full' },
             createElement(TabsList, { className: 'w-full grid grid-cols-4' },
               createElement(TabsTrigger, {
-                value: 'none', active: _authTab === 'none',
+                value: 'none', active: authTab === 'none',
                 onClick: () => setAuth('none'),
               }, 'None'),
               createElement(TabsTrigger, {
-                value: 'password', active: _authTab === 'password',
+                value: 'password', active: authTab === 'password',
                 onClick: () => setAuth('password'),
               }, 'Password'),
               createElement(TabsTrigger, {
-                value: 'sasl', active: _authTab === 'sasl',
+                value: 'sasl', active: authTab === 'sasl',
                 onClick: () => setAuth('sasl'),
               }, 'SASL'),
               createElement(TabsTrigger, {
-                value: 'nostr', active: _authTab === 'nostr',
+                value: 'nostr', active: authTab === 'nostr',
                 onClick: () => setAuth('nostr'),
               }, '⚡ Nostr'),
             ),
 
             // None
-            createElement(TabsContent, { value: 'none', active: _authTab === 'none', className: 'pt-3' },
+            createElement(TabsContent, { value: 'none', active: authTab === 'none', className: 'pt-3' },
               createElement('p', {
                 className: 'text-sm text-muted-foreground text-center py-4',
               }, 'No authentication. Connect as a guest.'),
             ),
 
             // Password
-            createElement(TabsContent, { value: 'password', active: _authTab === 'password', className: 'pt-3 space-y-4' },
+            createElement(TabsContent, { value: 'password', active: authTab === 'password', className: 'pt-3 space-y-4' },
               createElement('p', {
                 className: 'text-xs text-muted-foreground',
               }, 'Server password sent during connection. Most servers don\'t require this.'),
@@ -192,7 +198,7 @@ export function ConnectForm() {
             ),
 
             // SASL
-            createElement(TabsContent, { value: 'sasl', active: _authTab === 'sasl', className: 'pt-3 space-y-4' },
+            createElement(TabsContent, { value: 'sasl', active: authTab === 'sasl', className: 'pt-3 space-y-4' },
               createElement('p', {
                 className: 'text-xs text-muted-foreground',
               }, 'SASL PLAIN authentication during connection. Required by some networks like Libera.Chat.'),
@@ -211,18 +217,18 @@ export function ConnectForm() {
             ),
 
             // Nostr
-            createElement(TabsContent, { value: 'nostr', active: _authTab === 'nostr', className: 'pt-3 space-y-4' },
+            createElement(TabsContent, { value: 'nostr', active: authTab === 'nostr', className: 'pt-3 space-y-4' },
               createElement('p', {
                 className: 'text-xs text-muted-foreground',
               }, 'Use your Nostr identity to register or identify with NickServ. Requires a NIP-07 browser extension.'),
 
               createElement(Button, {
-                variant: state.nostrPubkey ? 'secondary' : 'outline',
-                className: state.nostrPubkey
+                variant: pubkey ? 'secondary' : 'outline',
+                className: pubkey
                   ? 'w-full border-online/30 text-online bg-online/10 hover:bg-online/15 h-auto py-2'
                   : 'w-full',
                 onClick: async () => {
-                  if (state.nostrPubkey) return;
+                  if (pubkey) return;
                   try {
                     const pubkey = await nostr.loginWithExtension();
                     store.setNostrPubkey(pubkey);
@@ -231,9 +237,9 @@ export function ConnectForm() {
                   }
                 },
               },
-                state.nostrPubkey
+                pubkey
                   ? (() => {
-                      const profile = nostr.getProfile(state.nostrPubkey!);
+                      const profile = nostr.getProfile(pubkey!);
                       return createElement('div', { className: 'flex items-center gap-2.5 w-full' },
                         profile?.picture
                           ? createElement('img', {
@@ -247,7 +253,7 @@ export function ConnectForm() {
                             profile?.displayName || profile?.name || 'Connected',
                           ),
                           createElement('span', { className: 'text-[10px] opacity-70 truncate' },
-                            state.nostrPubkey!.slice(0, 16) + '…',
+                            pubkey!.slice(0, 16) + '…',
                           ),
                         ),
                       );
@@ -258,7 +264,7 @@ export function ConnectForm() {
                     ),
               ),
 
-              state.nostrPubkey
+              pubkey
                 ? createElement('div', { className: 'space-y-4' },
                     createElement(Separator, null),
 
@@ -272,9 +278,9 @@ export function ConnectForm() {
                     createElement('div', { className: 'flex items-center gap-3' },
                       createElement(Switch, {
                         checked: _nsRegister,
-                        onChange: (v: boolean) => { _nsRegister = v; store['notify'](); },
+                        onChange: (v: boolean) => { _nsRegister.value = v; },
                       }),
-                      createElement(HiddenBool, { name: 'ns_register_val', value: _nsRegister }),
+                      createElement(HiddenBool, { name: 'ns_register_val', value: nsRegister }),
                       createElement('div', null,
                         createElement(Label, null, 'Register new account'),
                         createElement('p', { className: 'text-xs text-muted-foreground mt-0.5' },
@@ -292,7 +298,7 @@ export function ConnectForm() {
 
       // Footer
       createElement(CardFooter, { className: 'gap-3 pt-4 pb-6' },
-        state.networks.length > 0
+        nets.length > 0
           ? createElement(Button, {
               variant: 'ghost',
               className: 'flex-1',
@@ -306,4 +312,5 @@ export function ConnectForm() {
       ),
     ),
   );
+  });
 }

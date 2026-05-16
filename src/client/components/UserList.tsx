@@ -1,6 +1,7 @@
 import { createElement } from 'inferno-create-element';
+import { S } from 'blazecn';
 import { cn } from '../../lib/utils';
-import { store } from '../store';
+import { store, profileTick } from '../store';
 import { nostr } from '../nostr';
 import { nickColor } from '../helpers/colorClass';
 import type { IrcUser } from '../../shared/types';
@@ -93,8 +94,10 @@ function UserEntry({ user, mode }: { user: IrcUser; mode: string | null }) {
 }
 
 export function UserList() {
-  const channel = store.getActiveChannel();
-  if (!channel || !channel.users) return null;
+  return S(() => {
+    const channel = store.activeChannel.value;
+    profileTick.value; // re-render when nostr profiles update
+    if (!channel || !channel.users) return null;
 
   const userCount = Object.keys(channel.users).length;
   const groups = groupUsers(channel.users);
@@ -126,4 +129,5 @@ export function UserList() {
 
     createElement('div', { className: 'h-4' }),
   );
+  });
 }
